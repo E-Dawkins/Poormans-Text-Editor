@@ -1,0 +1,27 @@
+this is a test of a new file :)
+
+... and this is line 3!
+
+BIG GAP
+IG GAP
+G GAP
+ GAP
+GAP
+AP
+P
+
+nice one!
+
+small-gap
+
+evensmallergap
+
+wow it just works
+
+	tab!
+
+and tab mid	sentence
+
+left and right arrows work too!
+
+escape exits the editor, and saves the file.
