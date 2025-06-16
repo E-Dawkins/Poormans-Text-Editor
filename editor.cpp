@@ -11,8 +11,9 @@ std::filesystem::path currentPath = "test.txt";
 int lineNumber = 0, charNumber = 0;
 bool running = true;
 
-#define HIGHLIGHT "\033[7m"
-#define RESET "\033[0m"
+#define GRAY_START "\033[90m"
+#define GRAY_END "\033[0m"
+#define HIGHLIGHT_STR "\033[7m \033[0m"
 #define CLAMP(x, low, high) std::max(std::min(x, high), low);
 
 int getConsoleHeight() {
@@ -21,6 +22,28 @@ int getConsoleHeight() {
         return csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
     }
     return 10;
+}
+
+std::string intToStr(int _i, size_t _length) {
+    std::string output = std::to_string(_i);
+
+    // pad output so it is the specified length
+    for (size_t i = output.length(); i < _length; i++) {
+        output += " ";
+    }
+
+    return output;
+}
+
+int digitCount(int _i) {
+    int output = 1;
+
+    while (_i >= 10) {
+        _i /= 10;
+        output++;
+    }
+
+    return output;
 }
 
 void loadFileContents() {
@@ -55,33 +78,33 @@ void saveFileContents() {
     file.close();
 }
 
-void dumpFileContents() {
-    for (auto& line : fileContents) {
-        std::cout << line << "\n";
-    }
-}
-
 void printCurrentWindow() {
-    const int startIndex = lineNumber;
-    const int endIndex = startIndex + getConsoleHeight() - 2;
+    const int terminalHeight = getConsoleHeight() - 2;
+    
+    static int startIndex = lineNumber;
+    static int endIndex = startIndex + terminalHeight;
+
+    // adjust indexes to keep cursor always in view
+    if (lineNumber < startIndex) {
+        startIndex = lineNumber;
+        endIndex = startIndex + terminalHeight;
+    }
+    if (lineNumber >= endIndex) {
+        endIndex = lineNumber + 1;
+        startIndex = endIndex - terminalHeight;
+    }
+
+    int contentDigitCount = digitCount(fileContents.size()) + 1;
     for (int i = startIndex; i < endIndex; i++) {
         if (i < fileContents.size()) {
             std::string currentLine = fileContents[i];
 
             // only highlight the selected line
-            if (i == startIndex) {
-                if (charNumber == currentLine.size()) {
-                    currentLine += HIGHLIGHT;
-                    currentLine += " ";
-                    currentLine += RESET;
-                } 
-                else {
-                    currentLine.insert(charNumber, HIGHLIGHT);
-                    currentLine.insert(charNumber + strlen(HIGHLIGHT) + 1, RESET);
-                }
+            if (i == lineNumber) {
+                currentLine.insert(charNumber, HIGHLIGHT_STR);
             }
 
-            std::cout << std::to_string(i + 1) << "\t" << currentLine << "\n";
+            std::cout << GRAY_START << intToStr(i + 1, contentDigitCount) << " " << GRAY_END << currentLine << "\n";
         } else {
             std::cout << "~\n";
         }
@@ -113,8 +136,8 @@ void decrementLineNumber() {
 }
 
 void incrementCharNumber() {
-    // no lines in file
-    if (fileContents.empty()) {
+    // no lines in file, or at end of file
+    if (fileContents.empty() || (lineNumber == fileContents.size() - 1 && charNumber == fileContents.back().size())) {
         return;
     }
 
@@ -125,6 +148,7 @@ void incrementCharNumber() {
     // otherwise, we are at end of line and should move to start of next line
     else {
         incrementLineNumber();
+        charNumber = 0; // explicitly set cursor to line start
     }
 }
 
@@ -169,6 +193,7 @@ void addNewLine() {
             fileContents.insert(fileContents.begin() + lineNumber + 1, right);
         }
         incrementLineNumber();
+        charNumber = 0; // explicitly set cursor to line start
     }
 }
 
@@ -179,9 +204,9 @@ void addTab() {
     }
 }
 
-void removeCurrentChar() {
+void removePrevChar() {
     // no file content, or at top-left of empty file
-    if (fileContents.empty() || (lineNumber == 0 && charNumber == 0 && fileContents[0].empty())) {
+    if (fileContents.empty() || (lineNumber == 0 && charNumber == 0)) {
         return;
     }
 
@@ -195,24 +220,26 @@ void removeCurrentChar() {
             charNumber = fileContents[lineNumber].size();
         }
     }
-    // if exceeding line size, just decrement cursor
-    else if (charNumber >= fileContents[lineNumber].size()) {
-        decrementCharNumber();
-    }
-    // otherwise, just remove the current character
-    else {
-        fileContents[lineNumber].erase(charNumber, 1);
+    // at line start, combine previous + current lines
+    else if (charNumber == 0) {
+        std::string previous = fileContents[lineNumber - 1];
+        std::string current = fileContents[lineNumber];
 
-        // *not* at start of line
-        if (charNumber > 0) {
-            decrementCharNumber();
-        }
+        fileContents.erase(fileContents.begin() + lineNumber);
+        decrementLineNumber();
+        fileContents[lineNumber] = previous + current;
+        charNumber = previous.size(); // explicitly set cursor to line end
+    }
+    // otherwise, just remove the previous character
+    else {
+        fileContents[lineNumber].erase(charNumber - 1, 1);
+        decrementCharNumber();
     }
 }
 
 void removeNextChar() {
     // no file content, or at bottom-right of file
-    if (fileContents.empty() || (lineNumber == fileContents.size() - 1 && charNumber >= fileContents.back().size() - 1)) {
+    if (fileContents.empty() || (lineNumber == fileContents.size() - 1 && charNumber >= fileContents.back().size())) {
         return;
     }
 
@@ -222,7 +249,7 @@ void removeNextChar() {
         incrementLineNumber();
     }
     // combine current + next lines
-    else if (charNumber >= fileContents[lineNumber].size() - 1) {
+    else if (charNumber >= fileContents[lineNumber].size()) {
         std::string current = fileContents[lineNumber];
         std::string next = fileContents[lineNumber + 1];
 
@@ -231,7 +258,7 @@ void removeNextChar() {
     }
     // erase next char from current line
     else {
-        fileContents[lineNumber].erase(charNumber + 1, 1);
+        fileContents[lineNumber].erase(charNumber, 1);
     }
 }
 
@@ -243,9 +270,9 @@ void writeCurrentChar(char _c) {
         current += _c;
         incrementCharNumber();
     }
-    // otherwise, overwrite the current char in the current line
+    // otherwise, insert the character into the line
     else {
-        current[charNumber] = _c;
+        current.insert(current.begin() + charNumber, _c);
         incrementCharNumber();
     }
 }
@@ -275,7 +302,7 @@ bool handleInput() {
                 case 27: running = false; break; // escape
                 case 13: addNewLine(); break; // enter
                 case 9: addTab(); break; // tab
-                case 8: removeCurrentChar(); break; // backspace
+                case 8: removePrevChar(); break; // backspace
                 default: writeCurrentChar(key); break;
             }
         }
