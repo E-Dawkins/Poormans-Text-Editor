@@ -47,6 +47,12 @@ int digitCount(int _i) {
 }
 
 void loadFileContents() {
+    // if not a *.txt file, then default to "test.txt"
+    if (currentPath.extension() != ".txt") {
+        currentPath = "test.txt";
+    }
+
+    // try and open the file
     if (std::filesystem::exists(currentPath)) {
         std::ifstream file;
         file.open(currentPath, std::ios::in);
@@ -67,7 +73,7 @@ void loadFileContents() {
 
 void saveFileContents() {
     std::ofstream file;
-    file.open(currentPath);
+    file.open(currentPath); // this will create the file, if it doesn't already exist
 
     if (file.is_open()) {
         for (auto& line : fileContents) {
